@@ -5,7 +5,8 @@ from datetime import datetime
 import os
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+# Render par sahi se background sync karne ke liye cors aur gevent ensure kiya
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 
 # Tracks active users: { request.sid: {"username": str, "gender": str} }
 active_users = {}
@@ -73,6 +74,6 @@ def handle_disconnect():
         emit('system_message', {'msg': f"🔴 {user_info['username']} left the session"}, broadcast=True)
 
 if __name__ == '__main__':
-    # Bypasses local port 5000 conflicts dynamically
+    # Render automatic PORT environment variable deta hai, nahi toh default 5001
     port = int(os.environ.get("PORT", 5001))
-    socketio.run(app, host='0.0.0.0', port=port, debug=True)
+    socketio.run(app, host='0.0.0.0', port=port)

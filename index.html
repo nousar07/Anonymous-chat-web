@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anonymous Chat Session</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         :root {
             --bg-gradient: linear-gradient(135deg, #0f0c20 0%, #15102a 50%, #06040a 100%);
@@ -256,7 +256,11 @@
 </footer>
 
 <script>
-    const socket = io();
+    // Cloud environments (Render) par polling aur websocket dono transports ko enable kiya real-time performance ke liye
+    const socket = io({
+        transports: ['polling', 'websocket']
+    });
+    
     let selectedGender = "Male";
     let myUsername = "";
     let selectedReplyText = null;
