@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anonymous Chat Session</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #090615 0%, #0f0c24 50%, #040208 100%);
+            --glass-bg: rgba(18, 14, 34, 0.75);
+            --glass-border: rgba(255, 255, 255, 0.07);
+            --accent-blue: #3b82f6;
+            --accent-blue-glow: rgba(59, 130, 246, 0.4);
+            --accent-pink: #ec4899;
+            --accent-pink-glow: rgba(236, 72, 153, 0.4);
+            --text-main: #f4f4f5;
+            --text-muted: #9a9ab0;
+            --input-bg: rgba(7, 5, 14, 0.6);
+            --whatsapp-blue: #38bdf8;
+            --my-msg-bg: linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.15) 100%);
+            --other-msg-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container { flex: 1; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .card { background: var(--glass-bg); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid var(--glass-border); border-radius: 28px; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.05); width: 100%; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        #loginScreen { max-width: 440px; padding: 40px; text-align: center; box-sizing: border-box; }
+        #fullScreen { max-width: 420px; padding: 40px; text-align: center; box-sizing: border-box; display: none; }
+        #chatScreen { max-width: 950px; height: 85vh; display: none; grid-template-columns: 260px 1fr; overflow: hidden; }
+
+        h2 { font-size: 28px; margin-top: 0; margin-bottom: 8px; letter-spacing: -0.5px; }
+        .gender-selection { display: flex; gap: 16px; justify-content: center; margin: 32px 0 24px 0; }
+        .gender-btn { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border); color: var(--text-main); padding: 14px 28px; border-radius: 14px; cursor: pointer; font-size: 15px; font-weight: 500; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        .gender-btn:hover { background: rgba(255, 255, 255, 0.07); transform: translateY(-1px); }
+        .gender-btn.active[data-gender="Male"] { border-color: var(--accent-blue); background: rgba(59, 130, 246, 0.15); box-shadow: 0 0 25px var(--accent-blue-glow); }
+        .gender-btn.active[data-gender="Female"] { border-color: var(--accent-pink); background: rgba(236, 72, 153, 0.15); box-shadow: 0 0 25px var(--accent-pink-glow); }
+
+        .btn-primary { background: #fff; color: #0b0813; border: none; padding: 15px; font-weight: 600; border-radius: 14px; cursor: pointer; width: 100%; font-size: 16px; transition: all 0.2s; }
+        .btn-primary:hover { background: #e4e4e7; transform: translateY(-1px); box-shadow: 0 10px 20px rgba(255,255,255,0.1); }
+
+        .chat-sidebar { background: rgba(5, 3, 10, 0.4); border-right: 1px solid var(--glass-border); padding: 24px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+        .identity-card { background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%); border: 1px solid var(--glass-border); padding: 14px; border-radius: 16px; margin-bottom: 20px; }
+        .active-users-box { flex: 1; margin: 10px 0; background: rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.03); padding: 14px; border-radius: 16px; overflow-y: auto; max-height: calc(100% - 130px); }
+        .active-users-box::-webkit-scrollbar { width: 4px; }
+        .active-users-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
+        .active-users-header { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        #usersList { list-style: none; padding: 0; margin: 0; }
+        .user-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 6px; border-bottom: 1px solid rgba(255, 255, 255, 0.02); font-size: 14px; }
+        .user-meta { display: flex; flex-direction: column; }
+        .user-uid { font-size: 10px; color: #64748b; margin-top: 2px; font-family: monospace; }
+        .status-wrapper { display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 8px; height: 8px; background-color: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981; }
+        .status-dot.typing-mode { background-color: #3b82f6; box-shadow: 0 0 10px #3b82f6; animation: statusPulse 1.2s infinite; }
+        
+        @keyframes statusPulse { 0% { transform: scale(0.9); opacity: 0.5; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.5; } }
+
+        .chat-main { display: flex; flex-direction: column; padding: 24px; overflow: hidden; position: relative; background: rgba(255, 255, 255, 0.01); }
+        .chat-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 18px; border-bottom: 1px solid var(--glass-border); }
+        .online-count { padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; border: 1px solid transparent; }
+        .chat-area { flex: 1; overflow-y: auto; margin: 20px 0; padding-right: 4px; display: flex; flex-direction: column; }
+        .chat-area::-webkit-scrollbar { width: 5px; }
+        .chat-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
+
+        .msg-container { position: relative; margin-bottom: 16px; padding: 14px 18px; border-radius: 20px; background: var(--other-msg-bg); border: 1px solid rgba(255, 255, 255, 0.03); max-width: 75%; width: fit-content; box-shadow: 0 4px 15px rgba(0,0,0,0.15); animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; align-self: flex-start; }
+        .msg-container.my-msg { align-self: flex-end; background: var(--my-msg-bg); border: 1px solid rgba(59, 130, 246, 0.25); box-shadow: 0 4px 20px rgba(59, 130, 246, 0.1); }
+        
+        .reply-hover-btn { position: absolute; right: -65px; top: 50%; transform: translateY(-50%); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--glass-border); color: var(--text-muted); border-radius: 20px; padding: 5px 12px; font-size: 11px; font-weight: 500; cursor: pointer; opacity: 0; backdrop-filter: blur(5px); transition: all 0.2s ease; }
+        .msg-container:hover .reply-hover-btn { opacity: 1; right: -60px; }
+        .reply-hover-btn:hover { background: #fff; color: #000; border-color: #fff; transform: translateY(-50%) scale(1.05); }
+        .msg-container.my-msg .reply-hover-btn { right: auto; left: -65px; }
+        .msg-container.my-msg:hover .reply-hover-btn { opacity: 1; left: -60px; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .msg-meta-row { display: flex; align-items: center; justify-content: flex-end; gap: 5px; font-size: 10.5px; color: var(--text-muted); margin-top: 6px; }
+        .ticks { color: var(--whatsapp-blue); font-weight: bold; font-size: 12px; letter-spacing: -1px; }
+        .msg-header { font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+        .gender-badge { font-size: 10px; padding: 2px 6px; border-radius: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .badge-male { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2); }
+        .badge-female { background: rgba(236, 72, 153, 0.15); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.2); }
+        .msg-text { font-size: 15.5px; line-height: 1.45; word-break: break-word; color: rgba(255, 255, 255, 0.95); }
+        .reply-preview-box { background: rgba(0, 0, 0, 0.3); border-left: 3px solid var(--accent-blue); padding: 8px 12px; font-size: 12.5px; color: #cbd5e1; margin-bottom: 8px; border-radius: 6px; opacity: 0.85; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        
+        .system-msg { text-align: center; font-size: 12px; color: var(--text-muted); margin: 16px auto; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.03); padding: 6px 16px; border-radius: 20px; width: fit-content; }
+        #typingIndicator { height: 22px; font-size: 13px; color: #60a5fa; margin-bottom: 6px; font-style: italic; font-weight: 500; }
+        #activeReplyBar { display: none; background: #19142d; border: 1px solid var(--glass-border); border-bottom: none; padding: 12px 18px; border-radius: 16px 16px 0 0; font-size: 13px; justify-content: space-between; align-items: center; }
+        #activeReplyBar button { background: rgba(239, 68, 68, 0.1); border: none; color: #ef4444; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; }
+
+        .input-group { display: flex; gap: 12px; position: relative; width: 100%; box-sizing: border-box; }
+        .input-group input { flex: 1; background: var(--input-bg); border: 1px solid var(--glass-border); color: #fff; padding: 16px 16px 16px 56px; border-radius: 16px; outline: none; font-size: 15px; }
+        .emoji-trigger { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 22px; cursor: pointer; opacity: 0.5; padding: 0; z-index: 10; }
+        .emoji-picker-panel { display: none; position: absolute; bottom: 74px; left: 0; background: rgba(13, 10, 24, 0.96); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid var(--glass-border); border-radius: 20px; padding: 14px; grid-template-columns: repeat(7, 1fr); gap: 10px; box-shadow: 0 15px 40px rgba(0,0,0,0.7); z-index: 999; width: 300px; box-sizing: border-box; }
+        .emoji-item { background: none; border: none; font-size: 22px; cursor: pointer; padding: 4px; border-radius: 10px; }
+        .emoji-item:hover { background: rgba(255,255,255,0.12); transform: scale(1.18); }
+
+        .btn-send { background: #fff; color: #000; border: none; padding: 0 26px; border-radius: 16px; cursor: pointer; font-weight: 600; font-size: 15px; }
+        .btn-leave { background: rgba(239, 68, 68, 0.08); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.15); padding: 14px; border-radius: 14px; cursor: pointer; width: 100%; font-weight: 600; font-size: 14px; }
+        footer { text-align: center; padding: 20px; font-size: 13px; color: var(--text-muted); border-top: 1px solid rgba(255,255,255,0.02); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="loginScreen" class="card">
+        <h2>Join Session</h2>
+        <p style="color: var(--text-muted); font-size: 14px; margin: 0;">Select an identity profile to step inside.</p>
+        
+        <div class="gender-selection">
+            <button type="button" class="gender-btn active" data-gender="Male" onclick="setGender('Male')">Male ♂</button>
+            <button type="button" class="gender-btn" data-gender="Female" onclick="setGender('Female')">Female ♀</button>
+        </div>
+
+        <div style="margin-bottom: 25px; background: rgba(255,255,255,0.01); padding: 16px; border-radius: 18px; border: 1px solid var(--glass-border); text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 14px; font-weight: 600; color: #fff;">System Notifications:</span>
+                <button id="notiToggleBtn" class="gender-btn" style="padding: 6px 14px; font-size: 12px; margin: 0; font-weight: 700;" onclick="toggleSystemPushAlerts()">
+                    OFF 🔕
+                </button>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.45; margin: 0;">
+                💡 <strong>How it works:</strong> Once turned ON, your device token registers securely. You will get native system panel notifications when users join, even if your browser is fully closed.
+            </p>
+        </div>
+        
+        <button class="btn-primary" onclick="joinSession()">Start Chatting</button>
+    </div>
+
+    <div id="fullScreen" class="card">
+        <h2>Session Is Full</h2>
+        <button class="btn-primary" style="margin-top: 20px;" onclick="window.location.reload()">Check Again</button>
+    </div>
+
+    <div id="chatScreen" class="card">
+        <div class="chat-sidebar">
+            <div style="display: flex; flex-direction: column; height: calc(100% - 60px);">
+                <h3 style="font-size: 18px; margin: 0 0 20px 0;">Dashboard</h3>
+                <div class="identity-card">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase;">Your Alias</div>
+                    <div id="myIdentity" style="font-weight: 600; font-size: 15px; color: #fff;">-</div>
+                </div>
+                <div class="active-users-box">
+                    <div class="active-users-header">Active Feed Users</div>
+                    <ul id="usersList"></ul>
+                </div>
+            </div>
+            <button class="btn-leave" onclick="leaveSession()">Leave Room</button>
+        </div>
+
+        <div class="chat-main">
+            <div class="chat-header">
+                <div style="font-weight: 600; font-size: 19px;">Anonymous Feed</div>
+                <span id="liveCount" class="online-count">0 users active</span>
+            </div>
+            <div id="chatArea" class="chat-area"></div>
+            <div id="typingIndicator"></div>
+            <div id="activeReplyBar">
+                <span id="replyBarText" style="color: rgba(255,255,255,0.85);">Replying to: </span>
+                <button onclick="clearReplyTarget()">&times;</button>
+            </div>
+            <div class="input-group">
+                <div id="emojiPicker" class="emoji-picker-panel"></div>
+                <button class="emoji-trigger" onclick="toggleEmojiPicker(event)">😀</button>
+                <input id="messageInput" type="text" placeholder="Type a message..." oninput="notifyTyping()" onkeydown="if(event.key === 'Enter') sendMsg()">
+                <button class="btn-send" onclick="sendMsg()">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer>Developed by Me</footer>
+
+<script>
+    window.vapidPublicKey = "BAXf7yR2pIQuJN4ok58e1wlDgOBS_oHEje0OHDCAUSu6P2MiBYXGXQJ3_HO8HYLFUoOmEcOIPgI40SRL4kldHp4=";
+
+    const socket = io({ transports: ['polling', 'websocket'] });
+    let selectedGender = "Male";
+    let myUsername = "";
+    let selectedReplyText = null;
+    let typingTimeout = null;
+    let isTypingState = false;
+    let isSubscribed = false;
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) { outputArray[i] = rawData.charCodeAt(i); }
+        return outputArray;
+    }
+
+    // Auto check state memory on page load
+    document.addEventListener("DOMContentLoaded", async () => {
+        if ('serviceWorker' in navigator && 'PushManager' in window) {
+            const register = await navigator.serviceWorker.getRegistration();
+            if (register) {
+                const subscription = await register.pushManager.getSubscription();
+                if (subscription) {
+                    setButtonState(true);
+                }
+            }
+        }
+    });
+
+    function setButtonState(on) {
+        const btn = document.getElementById("notiToggleBtn");
+        isSubscribed = on;
+        if (on) {
+            btn.innerText = "ON 🔔";
+            btn.style.borderColor = "var(--accent-blue)";
+            btn.style.background = "rgba(59, 130, 246, 0.15)";
+            btn.style.boxShadow = "0 0 10px var(--accent-blue-glow)";
+        } else {
+            btn.innerText = "OFF 🔕";
+            btn.style.borderColor = "var(--glass-border)";
+            btn.style.background = "rgba(255, 255, 255, 0.03)";
+            btn.style.boxShadow = "none";
+        }
+    }
+
+    async function toggleSystemPushAlerts() {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            alert('System notifications are not fully supported on this device browser.');
+            return;
+        }
+
+        if (isSubscribed) {
+            // Unsubscribe logic (OFF button functionality)
+            const register = await navigator.serviceWorker.getRegistration();
+            if (register) {
+                const subscription = await register.pushManager.getSubscription();
+                if (subscription) {
+                    await subscription.unsubscribe();
+                    setButtonState(false);
+                }
+            }
+        } else {
+            // Subscribe logic (ON button functionality)
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    alert('Permission denied for system notifications.');
+                    return;
+                }
+
+                const register = await navigator.serviceWorker.register('/sw.js');
+                
+                const subscription = await register.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(window.vapidPublicKey)
+                });
+
+                await fetch('/api/save-subscription', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(subscription)
+                });
+
+                setButtonState(true);
+            } catch (error) {
+                console.error('Service worker subscription failed:', error);
+                alert('Notification activation failed. Clear your browser cache and try again.');
+            }
+        }
+    }
+
+    // Standard Chat Core Socket Integrations Engine
+    const emojis = ['😀', '😂', '🤣', '🔥', '💖', '👍', '🙏', '💀', '💯', '👀', '🎉', '😮', '🤔', '🤫'];
+    function initEmojiPicker() {
+        const picker = document.getElementById("emojiPicker");
+        emojis.forEach(emoji => {
+            const btn = document.createElement("button");
+            btn.className = "emoji-item"; btn.innerText = emoji;
+            btn.onclick = (e) => { e.stopPropagation(); document.getElementById("messageInput").value += emoji; };
+            picker.appendChild(btn);
+        });
+    }
+    function toggleEmojiPicker(e) { e.stopPropagation(); const p = document.getElementById("emojiPicker"); p.style.display = p.style.display === "grid" ? "none" : "grid"; }
+    document.addEventListener("click", () => document.getElementById("emojiPicker").style.display = "none");
+
+    function setGender(g) { selectedGender = g; document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('active')); document.querySelector(`.gender-btn[data-gender="${g}"]`).classList.add('active'); }
+    function joinSession() { socket.emit('join_session', { gender: selectedGender }); }
+    
+    socket.on('session_joined', (data) => {
+        myUsername = data.username;
+        document.getElementById("myIdentity").innerText = myUsername;
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("chatScreen").style.display = "grid";
+    });
+    socket.on('session_full', () => { document.getElementById("loginScreen").style.display = "none"; document.getElementById("fullScreen").style.display = "block"; });
+
+    socket.on('user_count', (data) => {
+        const el = document.getElementById("liveCount");
+        el.innerText = data.count <= 1 ? "No users online" : `${data.count - 1} users online`;
+        el.style.color = data.count <= 1 ? "#f87171" : "#34d399";
+    });
+
+    socket.on('update_users_list', (users) => {
+        const el = document.getElementById("usersList"); el.innerHTML = '';
+        users.forEach(u => {
+            const li = document.createElement('li'); li.className = 'user-item';
+            const gColor = u.gender === "Male" ? "#60a5fa" : "#f472b6";
+            li.innerHTML = `<div class="user-meta"><span>${escapeHTML(u.alias)} <b style="color:${gColor}">${u.gender==="Male"?"♂":"♀"}</b></span><span class="user-uid">ID: ${u.id}</span></div><span class="${u.status==='typing'?'status-dot typing-mode':'status-dot'}"></span>`;
+            el.appendChild(li);
+        });
+    });
+
+    socket.on('system_message', (data) => { const el = document.getElementById("chatArea"); el.innerHTML += `<div class="system-msg">${escapeHTML(data.msg)}</div>`; el.scrollTop = el.scrollHeight; });
+    
+    socket.on('new_message', (data) => {
+        const el = document.getElementById("chatArea");
+        const isMe = data.sender === myUsername;
+        const bClass = data.gender === "Male" ? "badge-male" : "badge-female";
+        const reply = data.reply_to ? `<div class="reply-preview-box">↩ ${escapeHTML(data.reply_to)}</div>` : "";
+        
+        el.innerHTML += `<div class="msg-container ${isMe?'my-msg':''}">
+            ${reply}
+            <div class="msg-header"><span style="font-weight:600;">${escapeHTML(data.sender)}</span><span class="gender-badge ${bClass}">${data.gender==="Male"?"♂":"♀"}</span></div>
+            <div class="msg-text">${escapeHTML(data.msg)}</div>
+            <div class="msg-meta-row"><span>${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>${isMe?'<span class="ticks">✓✓</span>':''}</div>
+            <button class="reply-hover-btn" onclick="setReplyTarget('${escapeHTML(data.sender)}','${escapeHTML(data.msg)}')">Reply</button>
+        </div>`;
+        el.scrollTop = el.scrollHeight;
+    });
+
+    function sendMsg() {
+        const el = document.getElementById("messageInput"); const txt = el.value.trim(); if(!txt) return;
+        socket.emit('message', { msg: txt, reply_to: selectedReplyText }); el.value = ""; clearReplyTarget();
+    }
+    function setReplyTarget(s, t) { selectedReplyText = t; document.getElementById("replyBarText").innerHTML = `Replying to <b style="color:#60a5fa;">${s}</b>: <i>"${t}"</i>`; document.getElementById("activeReplyBar").style.display = "flex"; }
+    function clearReplyTarget() { selectedReplyText = null; document.getElementById("activeReplyBar").style.display = "none"; }
+    function notifyTyping() { if(!isTypingState){ isTypingState=true; socket.emit('typing',{is_typing:true}); } clearTimeout(typingTimeout); typingTimeout=setTimeout(()=>{ isTypingState=false; socket.emit('typing',{is_typing:false}); },1500); }
+    socket.on('user_typing', (data) => { document.getElementById("typingIndicator").innerText = data.is_typing ? `${data.username} is typing...` : ""; });
+    function leaveSession() { socket.disconnect(); document.getElementById("chatScreen").style.display = "none"; document.getElementById("loginScreen").style.display = "block"; socket.connect(); }
+    function escapeHTML(s) { return s.replace(/[&<>'"]/g, t => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[t] || t)); }
+    initEmojiPicker();
+</script>
+</body>
+</html>
