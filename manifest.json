@@ -1,0 +1,21 @@
+{
+  "name": "Anonymous Chat Session",
+  "short_name": "AmcNam",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090615",
+  "theme_color": "#090615",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
